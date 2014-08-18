@@ -1,16 +1,70 @@
 #!/bin/bash
 
-if [ -n "$1"]; then
-    Output_TAG=$1
+Output_Filename_Prefix="ReleaseNotes"
+Output_Header_Prefix="${PWD##*/} Release Notes"
+
+if [ -n "$1" ]; then
+    if [ "$1" == "/all" ]; then
+        Output_Filename="$Output_Filename_Prefix.md"
+        Output_Header="$Output_Header_Prefix"
+    else
+        Output_TAG=$1
+        Output_Filename=$(printf "%s-%s.md" "$Output_Filename_Prefix" "$1")
+        #Output_Header=$(printf "%is %s" "$Output_Header_Prefix" "$1")
+        Output_Header="$Output_Header_Prefix"
+    fi
+else
+    script_name=`basename $0`
+    echo "usage: $script_name [<tag_name>|/all]"
+    echo
+    echo -e "\t<tag_name>\tOutput specific tag commit history"
+    echo -e "\t/all\t\tOutput all tag commit history"
+    exit
 fi
 
-Tag_list=`git tag|tac` #Get tag list and reverse it
+Tag_list=($(git tag|tac)) #Get tag list and reverse it
 if [ "$?" -ne 0 ]
 then
-    echo "Terminate!!!!!"
+    echo "Git return error $?, Terminate!!!!!"
 fi
 
-for Tag in $Tag_list 
-do
-    echo ">>>$Tag"
+echo "$Output_Header" > $Output_Filename
+echo "=====================" >> $Output_Filename
+
+len_Tag_list=${#Tag_list[*]}
+
+for ((i = 0 ; i < "${len_Tag_list}"; i++)); do
+    next=$((i+1))
+    if [ "$Output_TAG" = "" ]; then
+        if [ "$next" -lt "$len_Tag_list" ]; then
+            Commit_list=$(git log --graph --pretty=format:'%s' --abbrev-commit --date=relative ${Tag_list[$next]}..${Tag_list[$i]})
+        else
+            Commit_list=$(git log --graph --pretty=format:'%s' --abbrev-commit --date=relative ${Tag_list[$i]})
+        fi
+    else
+        if [ "$Output_TAG" = "${Tag_list[$i]}" ]; then
+            Commit_list=$(git log --graph --pretty=format:'%s' --abbrev-commit --date=relative ${Tag_list[$next]}..${Tag_list[$i]})
+        else
+            continue
+        fi
+    fi
+
+    # Output tag name as second tier header
+    echo "${Tag_list[$i]}" >> $Output_Filename
+    echo "---------------------" >> $Output_Filename
+
+    # change delimiter (IFS) to new line.
+    IFS_BAK=$IFS
+    IFS=$'\n'
+    # Output each line
+    for j in $Commit_list; do
+        j=${j//\_/\\\_}
+        j=${j//\(/\\\(}
+        j=${j//\)/\\\)}
+        echo $j >> $Output_Filename
+    done
+    IFS=$IFS_BAK
+    
+    # Leave blank
+    echo "" >> $Output_Filename
 done
